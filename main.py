@@ -1,7 +1,7 @@
 import os
 import asyncio
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -20,15 +20,12 @@ DAY_WINDOW_HOURS = 24
 # =========================================
 
 today_posts = []
-today_date = datetime.utcnow().date()
+today_date = datetime.now(timezone.utc).date()
 
 
 async def resend_message(app, msg):
     if msg.text:
-        await app.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=msg.text
-        )
+        await app.bot.send_message(chat_id=CHANNEL_ID, text=msg.text)
 
     elif msg.photo:
         await app.bot.send_photo(
@@ -49,11 +46,11 @@ async def repost_worker(app):
     global today_posts, today_date
 
     while True:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # 🔄 New day → reset
         if now.date() != today_date:
-            today_posts = []
+            today_posts.clear()
             today_date = now.date()
 
         if today_posts:
@@ -74,8 +71,6 @@ async def repost_worker(app):
 
 
 async def collect_posts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global today_posts
-
     msg = update.message
     if not msg:
         return
@@ -90,11 +85,14 @@ async def on_startup(app):
     asyncio.create_task(repost_worker(app))
 
 
-app = ApplicationBuilder().token(BOT_TOKEN).post_init(on_startup).build()
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# ✅ CORRECT HANDLER FOR CHANNEL POSTS
+# channel posts handler
 app.add_handler(
     MessageHandler(filters.ChatType.CHANNEL, collect_posts)
 )
+
+# startup task
+app.post_init = on_startup
 
 app.run_polling()
